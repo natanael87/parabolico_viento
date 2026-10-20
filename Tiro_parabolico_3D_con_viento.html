@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tiro parabólico 3D con viento</title>
+<style>
+:root{--bg:rgba(255,255,255,.85);--fg:#1c2733;--mut:#5d6b7a;--line:rgba(0,0,0,.12);--ac:#1f7ae0;--ok:#16905a;--bad:#d9690a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:rgba(18,26,36,.84);--fg:#e8eef5;--mut:#9fb0c2;--line:rgba(255,255,255,.16);--ac:#5aa9ff;--ok:#43d48f;--bad:#ff9a3d}}
+:root[data-theme="dark"]{--bg:rgba(18,26,36,.84);--fg:#e8eef5;--mut:#9fb0c2;--line:rgba(255,255,255,.16);--ac:#5aa9ff;--ok:#43d48f;--bad:#ff9a3d}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0;overflow:hidden;background:#bfe0f8;color:var(--fg);font:13px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+canvas{position:fixed;inset:0;touch-action:none;cursor:grab}
+.card{background:var(--bg);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:14px;padding:10px 12px;box-shadow:0 6px 24px rgba(0,0,0,.14)}
+#panel{position:fixed;z-index:2;left:12px;top:calc(12px + env(safe-area-inset-top,0px));width:270px;max-height:calc(100% - 110px - env(safe-area-inset-top,0px));overflow:auto}
+#side{position:fixed;z-index:2;right:12px;top:calc(12px + env(safe-area-inset-top,0px));width:330px;max-width:calc(100% - 24px);display:flex;flex-direction:column;gap:10px}
+h1{font-size:14px;margin:0 0 2px}
+details{margin-top:6px;border-top:1px solid var(--line);padding-top:6px}
+summary{cursor:pointer;font-weight:600;list-style:none}summary::-webkit-details-marker{display:none}
+.s{display:grid;grid-template-columns:1fr auto;gap:0 8px;margin:7px 0}
+.s output{color:var(--mut);font-variant-numeric:tabular-nums}
+.s input{grid-column:1/3;width:100%;margin:3px 0 0;accent-color:var(--ac)}
+#ro div{display:flex;justify-content:space-between;margin:2px 0}#ro span{color:var(--mut)}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.lg{margin-top:6px;color:var(--mut);font-size:12px;display:flex;gap:10px;flex-wrap:wrap}.lg i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}
+.eq{max-height:52vh;overflow:auto}.eq summary{margin-bottom:2px}.eq p{margin:8px 0 0;color:var(--mut);font-size:12px}
+.eq mjx-container{font-size:92%;max-width:100%;overflow-x:auto;overflow-y:hidden;margin:.3em 0!important}
+.bar{position:fixed;z-index:2;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;gap:8px}
+button{font:inherit;font-weight:600;color:var(--fg);background:var(--bg);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:999px;padding:9px 16px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.14)}
+button.p{background:var(--ac);color:#fff;border-color:transparent}
+#msg{position:fixed;z-index:2;left:50%;transform:translateX(-50%);bottom:calc(64px + env(safe-area-inset-bottom,0px));background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:5px 12px;color:var(--bad)}#msg:empty{display:none}
+@media (max-width:760px){#panel{width:auto;right:12px;max-height:38vh}#side{top:auto;bottom:calc(64px + env(safe-area-inset-bottom,0px));width:auto;left:12px}#ro{display:none}.eq{max-height:30vh}}
+</style></head><body>
+<div id="panel" class="card"><h1>🚀 Tiro parabólico 3D</h1></div>
+<div id="side">
+ <div class="card"><div id="ro"></div>
+  <div class="lg"><span><i style="background:#4aa8ff"></i>Sin viento</span><span><i style="background:#ff8a1f"></i>Con viento</span><span><i style="background:#2ecc71"></i>Base corregida</span></div></div>
+ <details class="card eq" id="eq"><summary>∑ Ecuaciones</summary>
+  <p>Ejes: X lateral, Y a lo largo de la cancha, Z vertical. Modelo: arrastre lineal respecto al aire en movimiento</p>
+  \[\dot{\vec v}=\vec g-k\,(\vec v-\vec w),\qquad \vec g=(0,0,-g)\]
+  <p>Solución exacta</p>
+  \[\vec u=\vec w+\frac{\vec g}{k},\qquad \vec v(t)=\vec u+(\vec v_0-\vec u)\,e^{-kt}\]
+  \[\vec r(t)=\vec r_0+\vec u\,t+\frac{\vec v_0-\vec u}{k}\left(1-e^{-kt}\right)\]
+  <p>Velocidad inicial (θ sobre el piso, φ medido desde Y hacia X)</p>
+  \[\vec v_0=v_0\left(\cos\theta\sin\varphi,\ \cos\theta\cos\varphi,\ \sin\theta\right)\]
+  <p>Corrección de la base (método de Newton)</p>
+  \[\begin{pmatrix}\theta\\ \varphi\end{pmatrix}\leftarrow\begin{pmatrix}\theta\\ \varphi\end{pmatrix}-J^{-1}\left(\vec r_{xy}(t_f)-\vec r_{obj}\right)\]
+  \[J=\frac{\partial (x,y)}{\partial(\theta,\varphi)}\]
+ </details>
+</div>
+<div id="msg"></div>
+<div class="bar"><button class="p" id="go">▶ Lanzar</button><button id="fix">⟲ Corregir base</button><button id="rs">Reiniciar</button></div>
+
+<script>window.MathJax={tex:{inlineMath:[['\\(','\\)']],displayMath:[['\\[','\\]']]},svg:{fontCache:'global'}}</script>
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $=s=>document.querySelector(s),G=9.81,H0=1.4,D=Math.PI/180,LX=-52;
+const P0={v:30,el:60,az:0,wx:0,wy:0,wz:0,k:.15,tx:0,ty:60};
+let P={...P0},ghost=null,flight=null,anim=null,burst=0,live=null;
+if(innerWidth<=760)$('#eq').open=false;else $('#eq').open=true;
+
+/* ---------- física ---------- */
+function sim(el,az,w){
+  const e=el*D,a=az*D,k=P.k,dt=.01;
+  let x=0,y=0,z=H0,vx=P.v*Math.cos(e)*Math.sin(a),vy=P.v*Math.cos(e)*Math.cos(a),vz=P.v*Math.sin(e),t=0,hm=z;
+  const pts=[[x,y,z]];
+  for(let i=0;i<4000;i++){
+    vx-=k*(vx-w[0])*dt;vy-=k*(vy-w[1])*dt;vz+=(-G-k*(vz-w[2]))*dt;
+    const nx=x+vx*dt,ny=y+vy*dt,nz=z+vz*dt;
+    if(nz<=0){const f=z/(z-nz);x+=(nx-x)*f;y+=(ny-y)*f;t+=dt*f;pts.push([x,y,0]);z=0;break}
+    x=nx;y=ny;z=nz;t+=dt;hm=Math.max(hm,z);pts.push([x,y,z]);
+  }
+  return{pts,t,x,y,hm};
+}
+function solve(w,el,az){
+  const dx=P.tx,dy=P.ty,R=Math.hypot(dx,dy);
+  if(el==null){el=90-.5*Math.asin(Math.min(1,G*R/(P.v*P.v)))/D;el=Math.max(45,Math.min(80,el));az=Math.atan2(dx,dy)/D}
+  const f=(e,a)=>{const s=sim(e,a,w);return[s.x-dx,s.y-dy]};
+  for(let i=0;i<50;i++){
+    const r=f(el,az);if(Math.hypot(r[0],r[1])<.02)break;
+    const h=.05,r1=f(el+h,az),r2=f(el,az+h);
+    const a=(r1[0]-r[0])/h,b=(r2[0]-r[0])/h,c=(r1[1]-r[1])/h,d=(r2[1]-r[1])/h,det=a*d-b*c;
+    if(Math.abs(det)<1e-6)break;
+    let de=(d*r[0]-b*r[1])/det,da=(-c*r[0]+a*r[1])/det;
+    const m=Math.max(Math.abs(de),Math.abs(da));if(m>8){de*=8/m;da*=8/m}
+    el=Math.max(3,Math.min(87,el-de));az-=da;
+  }
+  const r=f(el,az);return{el,az,err:Math.hypot(r[0],r[1])};
+}
+const W=()=>[P.wx,P.wy,P.wz];
+
+/* ---------- escena ---------- */
+const R=new THREE.WebGLRenderer({antialias:true});R.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(R.domElement);
+const S=new THREE.Scene(),C=new THREE.PerspectiveCamera(50,1,.5,4000);
+S.fog=new THREE.Fog(0xcfe6f7,250,1000);
+S.add(new THREE.Mesh(new THREE.SphereGeometry(1800,32,16),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,
+  vertexShader:'varying vec3 p;void main(){p=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+  fragmentShader:'varying vec3 p;void main(){float h=clamp(normalize(p).y,0.,1.);gl_FragColor=vec4(mix(vec3(.81,.9,.97),vec3(.16,.5,.88),pow(h,.55)),1.);}'})));
+S.add(new THREE.HemisphereLight(0xffffff,0x6a9a5a,.9));
+const dl=new THREE.DirectionalLight(0xffffff,.7);dl.position.set(5,6,-6);S.add(dl);
+
+function blob(n,w,h,rmin,rmax,col){const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');
+  for(let i=0;i<n;i++){const x=w*.2+Math.random()*w*.6,y=h*.4+Math.random()*h*.25,r=rmin+Math.random()*(rmax-rmin),q=g.createRadialGradient(x,y,0,x,y,r);
+    q.addColorStop(0,col+'.9)');q.addColorStop(1,col+'0)');g.fillStyle=q;g.beginPath();g.arc(x,y,r,0,7);g.fill()}
+  return new THREE.CanvasTexture(c)}
+const sun=new THREE.Sprite(new THREE.SpriteMaterial({map:blob(1,128,128,60,60,'rgba(255,248,214,'),fog:false,depthWrite:false}));
+sun.position.set(700,780,-900);sun.scale.set(520,520,1);S.add(sun);
+const ctex=[0,1,2].map(()=>blob(14,256,128,20,46,'rgba(255,255,255,')),clouds=[];
+for(let i=0;i<18;i++){const c=new THREE.Sprite(new THREE.SpriteMaterial({map:ctex[i%3],fog:false,depthWrite:false,opacity:.95}));
+  const s=90+Math.random()*90;c.scale.set(s*2,s,1);c.position.set(-600+Math.random()*1200,90+Math.random()*90,-600+Math.random()*1200);S.add(c);clouds.push(c)}
+
+/* campo de fútbol americano */
+function fieldTex(){const y=18,Wd=2160,Hh=960,c=document.createElement('canvas');c.width=Wd;c.height=Hh;const g=c.getContext('2d');
+  for(let i=0;i<24;i++){g.fillStyle=i%2?'#2e8b3a':'#37a244';g.fillRect(i*5*y,0,5*y,Hh)}
+  g.fillStyle='#a3281f';g.fillRect(0,0,10*y,Hh);g.fillStyle='#1c3f8c';g.fillRect(110*y,0,10*y,Hh);
+  g.strokeStyle=g.fillStyle='#fff';g.lineWidth=5;
+  for(let j=10;j<=110;j+=5){g.beginPath();g.moveTo(j*y,0);g.lineTo(j*y,Hh);g.stroke()}
+  for(let j=11;j<110;j++)[23.6,29.7].forEach(h=>{g.beginPath();g.moveTo(j*y,h*y-7);g.lineTo(j*y,h*y+7);g.stroke()});
+  g.lineWidth=10;g.strokeRect(0,0,Wd,Hh);
+  g.font='bold 74px system-ui,sans-serif';g.textAlign='center';
+  for(let j=20;j<=100;j+=10){const n=j<=60?j-10:110-j;g.fillText(n,j*y,Hh-7*y);g.save();g.translate(j*y,7*y);g.rotate(Math.PI);g.fillText(n,0,0);g.restore()}
+  const t=new THREE.CanvasTexture(c);t.anisotropy=R.capabilities.getMaxAnisotropy();return t}
+const flat=(w,h,m,y)=>{const o=new THREE.Mesh(new THREE.PlaneGeometry(w,h),m);o.rotation.x=-Math.PI/2;o.position.y=y;S.add(o);return o};
+flat(4000,4000,new THREE.MeshBasicMaterial({color:0x3d7d38}),-.1);
+flat(126,62,new THREE.MeshBasicMaterial({color:0x2b6b30}),-.04);
+flat(109.73,48.77,new THREE.MeshBasicMaterial({map:fieldTex()}),0);
+[-1,1].forEach(sx=>{const m=new THREE.MeshLambertMaterial({color:0xffd23f}),g=new THREE.Group();
+  const add=(r,h,y,z,rx)=>{const o=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,8),m);o.position.set(0,y,z);o.rotation.x=rx||0;g.add(o)};
+  add(.12,3,1.5,0);add(.12,5.6,3.05,0,Math.PI/2);add(.1,6,6.05,-2.8);add(.1,6,6.05,2.8);g.position.x=sx*54.86;S.add(g)});
+
+/* lanzador */
+const L=new THREE.Group();L.position.set(LX,0,0);S.add(L);
+const lm=new THREE.MeshStandardMaterial({color:0x37474f,metalness:.4,roughness:.5});
+const bs=new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.6,1.1,20),lm);bs.position.y=.55;L.add(bs);
+const yaw=new THREE.Group();yaw.position.y=H0;L.add(yaw);
+const pitch=new THREE.Group();yaw.add(pitch);
+pitch.add(new THREE.Mesh(new THREE.SphereGeometry(.6,16,12),lm));
+const bg=new THREE.CylinderGeometry(.28,.34,3,14);bg.rotateZ(-Math.PI/2);bg.translate(1.5,0,0);
+pitch.add(new THREE.Mesh(bg,new THREE.MeshStandardMaterial({color:0xe8590c,roughness:.45})));
+
+/* cohete */
+const rocket=new THREE.Group(),nm=new THREE.MeshStandardMaterial({color:0xd7261e});
+rocket.add(new THREE.Mesh(new THREE.CylinderGeometry(.35,.35,2.2,12),new THREE.MeshStandardMaterial({color:0xf4f4f4,roughness:.4})));
+const nose=new THREE.Mesh(new THREE.ConeGeometry(.35,.9,12),nm);nose.position.y=1.55;rocket.add(nose);
+for(let i=0;i<3;i++){const fin=new THREE.Mesh(new THREE.BoxGeometry(.7,.8,.06),nm),fg=new THREE.Group();fin.position.set(.35,-.9,0);fg.rotation.y=i*2.094;fg.add(fin);rocket.add(fg)}
+const flame=new THREE.Mesh(new THREE.ConeGeometry(.28,1.2,10),new THREE.MeshBasicMaterial({color:0xffa31a}));flame.rotation.x=Math.PI;flame.position.y=-1.7;rocket.add(flame);
+rocket.scale.setScalar(1.4);rocket.visible=false;S.add(rocket);
+const ring=new THREE.Mesh(new THREE.RingGeometry(.8,1.2,32),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,side:2}));ring.rotation.x=-Math.PI/2;ring.visible=false;S.add(ring);
+
+/* objetivo */
+const tgt=new THREE.Group();S.add(tgt);
+[[3,0xd7261e,.05],[2.1,0xffffff,.08],[1.2,0xd7261e,.11]].forEach(([r,c,y])=>{const m=new THREE.Mesh(new THREE.CircleGeometry(r,32),new THREE.MeshBasicMaterial({color:c}));m.rotation.x=-Math.PI/2;m.position.y=y;tgt.add(m)});
+const pole=new THREE.Mesh(new THREE.CylinderGeometry(.08,.08,10,8),new THREE.MeshLambertMaterial({color:0xeeeeee}));pole.position.y=5;tgt.add(pole);
+const flag=new THREE.Mesh(new THREE.BoxGeometry(3,1.6,.05),new THREE.MeshLambertMaterial({color:0xd7261e}));flag.position.set(1.5,9.2,0);tgt.add(flag);
+
+/* ejes de referencia: X lateral (rojo), Y a lo largo (verde), Z vertical (azul) */
+function lbl(t,c){const k=document.createElement('canvas');k.width=k.height=64;const g=k.getContext('2d');g.font='bold 44px system-ui';g.textAlign='center';g.fillStyle=c;g.fillText(t,32,46);const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(k),depthTest:false,fog:false}));s.scale.set(3,3,1);return s}
+[['X',[0,0,1],0xe53935],['Y',[1,0,0],0x43a047],['Z',[0,1,0],0x1e88e5]].forEach(([n,d,c])=>{const o=new THREE.Vector3(LX-3,.1,-9),v=new THREE.Vector3(...d);S.add(new THREE.ArrowHelper(v,o,9,c,2,1));const s=lbl(n,'#'+c.toString(16).padStart(6,'0'));s.position.copy(o).addScaledVector(v,11);S.add(s)});
+/* trayectorias, marcas y viento */
+const mkTube=(c,o)=>{const m=new THREE.Mesh(new THREE.BufferGeometry(),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:o}));S.add(m);return m};
+const tRef=mkTube(0x4aa8ff,.6),tGhost=mkTube(0xff8a1f,.4),tLive=mkTube(0xff8a1f,1);
+const mkMark=c=>{const m=new THREE.Mesh(new THREE.SphereGeometry(.7,14,10),new THREE.MeshBasicMaterial({color:c}));S.add(m);return m};
+const mRef=mkMark(0x4aa8ff),mLive=mkMark(0xff8a1f);
+const T=p=>new THREE.Vector3(LX+p[1],p[2],p[0]);
+function tube(m,pts,r){const v=pts.filter((_,i)=>i%6==0||i==pts.length-1).map(p=>T(p));
+  m.geometry.dispose();m.geometry=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(v),100,r,6,false);m.visible=true}
+const arrow=new THREE.ArrowHelper(new THREE.Vector3(1,0,0),new THREE.Vector3(LX+8,24,16),10,0x6a3dff,3,1.6);S.add(arrow);
+
+/* cámara orbital */
+const cam={r:125,th:2.5,ph:.38,f:new THREE.Vector3(-8,6,0)};
+function setCam(){const c=Math.cos(cam.ph);C.position.set(cam.f.x+cam.r*c*Math.cos(cam.th),cam.f.y+cam.r*Math.sin(cam.ph),cam.f.z+cam.r*c*Math.sin(cam.th));C.lookAt(cam.f)}
+const cv=R.domElement;let drag=null;
+cv.onpointerdown=e=>{drag=[e.clientX,e.clientY];cv.setPointerCapture(e.pointerId)};
+cv.onpointermove=e=>{if(!drag)return;cam.th-=(e.clientX-drag[0])*.006;cam.ph=Math.max(.05,Math.min(1.45,cam.ph+(e.clientY-drag[1])*.005));drag=[e.clientX,e.clientY];setCam()};
+cv.onpointerup=()=>drag=null;
+cv.addEventListener('wheel',e=>{e.preventDefault();cam.r=Math.max(25,Math.min(300,cam.r*(1+e.deltaY*.001)));setCam()},{passive:false});
+function resize(){R.setSize(innerWidth,innerHeight);C.aspect=innerWidth/innerHeight;C.updateProjectionMatrix()}
+addEventListener('resize',resize);
+
+/* ---------- interfaz ---------- */
+const defs=[['Lanzamiento',[['v','Velocidad v₀','m/s',10,45,.5],['el','Elevación θ','°',3,87,.1],['az','Azimut φ','°',-60,60,.1]]],
+ ['Viento',[['wx','w<sub>x</sub> · lateral','m/s',-20,20,.1],['wy','w<sub>y</sub> · a lo largo','m/s',-20,20,.1],['wz','w<sub>z</sub> · vertical','m/s',-10,10,.1],['k','Arrastre k','s⁻¹',.02,.4,.01]]],
+ ['Objetivo',[['tx','Desviación lateral X','m',-20,20,1],['ty','Distancia Y','m',20,100,1]]]];
+const ins={};
+defs.forEach(([t,rows],i)=>{const d=document.createElement('details');d.open=innerWidth>760||i==0;d.innerHTML='<summary>'+t+'</summary>';
+  rows.forEach(([key,lab,u,mn,mx,st])=>{const l=document.createElement('label');l.className='s';
+    l.innerHTML=`<span>${lab}</span><output></output><input type="range" min="${mn}" max="${mx}" step="${st}">`;
+    const inp=l.querySelector('input');ins[key]=[inp,l.querySelector('output'),u,st];
+    inp.oninput=()=>{P[key]=+inp.value;ghost=null;$('#msg').textContent='';sync();update()};d.append(l)});
+  $('#panel').append(d)});
+function sync(){for(const k in ins){const[i,o,u,st]=ins[k];i.value=P[k];o.textContent=(+P[k]).toFixed(st<.1?2:st<1?1:0)+' '+u}}
+
+function update(){
+  const r=sim(P.el,P.az,[0,0,0]),l=sim(P.el,P.az,W());live=l;
+  const err=Math.hypot(l.x-P.tx,l.y-P.ty),hit=err<.6;
+  tube(tRef,r.pts,.2);tube(tLive,l.pts,.3);tLive.material.color.set(hit?0x2ecc71:0xff8a1f);
+  if(ghost)tube(tGhost,ghost,.25);else tGhost.visible=false;
+  mRef.position.set(LX+r.y,.5,r.x);mLive.position.set(LX+l.y,.5,l.x);mLive.material.color.copy(tLive.material.color);
+  tgt.position.set(LX+P.ty,0,P.tx);yaw.rotation.y=-P.az*D;pitch.rotation.z=P.el*D;
+  const w=new THREE.Vector3(P.wy,P.wz,P.wx),m=w.length();arrow.visible=m>.05;
+  if(m>.05){arrow.setDirection(w.normalize());arrow.setLength(4+m*1.1,3,1.6)}
+  $('#ro').innerHTML=`<div><span>Distancia al objetivo</span><b class="${hit?'ok':'bad'}">${hit?'¡Impacto! ':''}${err.toFixed(1)} m</b></div>
+   <div><span>Desvío causado por el viento</span><b>${Math.hypot(l.x-r.x,l.y-r.y).toFixed(1)} m</b></div>
+   <div><span>Altura máxima</span><b>${l.hm.toFixed(1)} m</b></div><div><span>Tiempo de vuelo</span><b>${l.t.toFixed(2)} s</b></div>`;
+}
+function reset(){P={...P0};const s=solve([0,0,0]);P.el=s.el;P.az=s.az;ghost=null;flight=null;anim=null;rocket.visible=false;ring.visible=false;$('#msg').textContent='';sync();update()}
+
+$('#go').onclick=()=>{if(!live)return;flight={t:0,pts:live.pts};rocket.visible=true;ring.visible=false;burst=0};
+$('#rs').onclick=reset;
+$('#fix').onclick=()=>{
+  const old=sim(P.el,P.az,W()).pts,s=solve(W(),P.el,P.az);
+  if(s.err>.3){$('#msg').textContent='Objetivo fuera de alcance: aumenta v₀ o acerca el objetivo';return}
+  $('#msg').textContent='';ghost=old;anim={t:0,f:[P.el,P.az],to:[s.el,s.az]};
+};
+
+/* ---------- animación ---------- */
+const UP=new THREE.Vector3(0,1,0);let last=performance.now();
+function loop(now){
+  requestAnimationFrame(loop);const dt=Math.min((now-last)/1000,.05);last=now;
+  clouds.forEach(c=>{const p=c.position;p.x+=(5+P.wy*.9)*dt;p.z+=P.wx*.9*dt;
+    if(p.x>650)p.x=-650;if(p.x<-650)p.x=650;if(p.z>650)p.z=-650;if(p.z<-650)p.z=650});
+  sun.material.opacity=.92+.08*Math.sin(now/900);
+  if(anim){anim.t+=dt/.9;const u=Math.min(anim.t,1),e=u*u*(3-2*u);
+    P.el=anim.f[0]+(anim.to[0]-anim.f[0])*e;P.az=anim.f[1]+(anim.to[1]-anim.f[1])*e;sync();update();if(u>=1)anim=null}
+  if(flight){flight.t+=dt;const p=flight.pts,i=Math.floor(flight.t*100);
+    if(i>=p.length-1){const q=p[p.length-1];rocket.visible=false;ring.position.set(LX+q[1],.15,q[0]);ring.visible=true;burst=0;flight=null}
+    else{const a=p[i],b=p[i+1];rocket.position.set(LX+a[1],a[2],a[0]);
+      rocket.quaternion.setFromUnitVectors(UP,new THREE.Vector3(b[1]-a[1],b[2]-a[2],b[0]-a[0]).normalize());flame.scale.y=.8+Math.random()*.6}}
+  if(ring.visible){burst+=dt/.8;ring.scale.setScalar(1+burst*9);ring.material.opacity=Math.max(0,1-burst);if(burst>=1)ring.visible=false}
+  R.render(S,C);
+}
+resize();setCam();reset();requestAnimationFrame(loop);
+</script>
+</body></html>
